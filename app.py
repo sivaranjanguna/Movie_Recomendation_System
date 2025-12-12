@@ -45,18 +45,18 @@ st.markdown('<div class="title">🎬 Netflix-Style Movie Recommendation</div>', 
 # ----------------------------------------------------
 # Google Drive URLs
 # ----------------------------------------------------
-MOVIES_URL = "https://drive.google.com/uc?export=download&id=YOUR_MOVIES_FILE_ID"
-SIM_URL = "https://drive.google.com/uc?export=download&id=YOUR_SIM_FILE_ID"
+MOVIES_URL = "https://drive.google.com/uc?export=download&id=1tnA7-HNQK-OwdGwzGfNBenfijDCRv7TA"
+SIM_URL = "https://drive.google.com/uc?export=download&id=1UUMf4GRrFpiab4_9peK7GGH21p9MCq5D"
 
 # ----------------------------------------------------
-# Robust Google Drive Download
+# Robust Google Drive Download with retry
 # ----------------------------------------------------
 def download_file_from_google_drive(url: str, max_retries=3) -> io.BytesIO:
     session = requests.Session()
     for attempt in range(max_retries):
         try:
             response = session.get(url, stream=True)
-            # Handle large file confirmation token
+            # Handle large file confirmation
             token = None
             for key, value in response.cookies.items():
                 if key.startswith("download_warning"):
@@ -68,10 +68,10 @@ def download_file_from_google_drive(url: str, max_retries=3) -> io.BytesIO:
             return io.BytesIO(response.content)
         except requests.exceptions.RequestException as e:
             if attempt < max_retries - 1:
-                time.sleep(2)  # wait before retry
+                time.sleep(2)
                 continue
             else:
-                raise st.error(f"Failed to download file from Google Drive: {e}")
+                raise ValueError(f"Failed to download file from Google Drive: {e}")
 
 # ----------------------------------------------------
 # Load Pickle
