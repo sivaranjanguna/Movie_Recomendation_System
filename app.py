@@ -43,62 +43,48 @@ st.markdown("""
 st.markdown('<div class="title">🎬 Netflix-Style Movie Recommendation</div>', unsafe_allow_html=True)
 
 # ----------------------------------------------------
-# Google Drive URLs
+# Hugging Face URLs (YOUR LINKS)
 # ----------------------------------------------------
-MOVIES_URL = "https://drive.google.com/uc?export=download&id=1tnA7-HNQK-OwdGwzGfNBenfijDCRv7TA"
-SIM_URL = "https://drive.google.com/uc?export=download&id=1UUMf4GRrFpiab4_9peK7GGH21p9MCq5D"
+MOVIES_URL = "https://huggingface.co/spaces/SIVARANJAN03/Movies-Recomendation-System/resolve/main/movies_list.pkl"
+SIM_URL = "https://huggingface.co/spaces/SIVARANJAN03/Movies-Recomendation-System/resolve/main/similarity.pkl"
 
 # ----------------------------------------------------
-# Robust Google Drive Download with retry
+# Hugging Face File Downloader
 # ----------------------------------------------------
-def download_file_from_google_drive(url: str, max_retries=3) -> io.BytesIO:
-    session = requests.Session()
-    for attempt in range(max_retries):
-        try:
-            response = session.get(url, stream=True)
-            # Handle large file confirmation
-            token = None
-            for key, value in response.cookies.items():
-                if key.startswith("download_warning"):
-                    token = value
-            if token:
-                url = url + "&confirm=" + token
-                response = session.get(url, stream=True)
-            response.raise_for_status()
-            return io.BytesIO(response.content)
-        except requests.exceptions.RequestException as e:
-            if attempt < max_retries - 1:
-                time.sleep(2)
-                continue
-            else:
-                raise ValueError(f"Failed to download file from Google Drive: {e}")
+def download_from_huggingface(url: str) -> io.BytesIO:
+    try:
+        response = requests.get(url, timeout=30)
+        response.raise_for_status()
+        return io.BytesIO(response.content)
+    except Exception as e:
+        st.error(f"❌ Failed to download file:\n{e}")
+        st.stop()
 
 # ----------------------------------------------------
 # Load Pickle
 # ----------------------------------------------------
 @st.cache_resource
 def load_pickle_from_url(url: str):
-    content = download_file_from_google_drive(url)
+    content = download_from_huggingface(url)
     try:
         return pickle.load(content)
     except Exception as e:
-        raise ValueError(
-            "Failed to load pickle. The downloaded file may be invalid or HTML instead of a pickle file."
-        ) from e
+        raise ValueError("❌ Invalid pickle file downloaded.") from e
 
 # ----------------------------------------------------
-# Load Numpy .npy
+# Load Numpy .npy or .pkl
 # ----------------------------------------------------
 @st.cache_resource
 def load_numpy_from_url(url: str):
-    content = download_file_from_google_drive(url)
-    magic = content.read(6)  # .npy files start with b'\x93NUMPY'
-    if magic != b'\x93NUMPY':
-        raise ValueError(
-            "Downloaded file is not a valid .npy file. It may be an HTML page from Google Drive instead of the actual data file."
-        )
-    content.seek(0)
-    return np.load(content, allow_pickle=True)
+    content = download_from_huggingface(url)
+    try:
+        return np.load(content, allow_pickle=True)
+    except:
+        try:
+            content.seek(0)
+            return pickle.load(content)
+        except Exception as e:
+            raise ValueError("❌ Failed to load similarity matrix (invalid .npy/.pkl).") from e
 
 # ----------------------------------------------------
 # Load Data
@@ -107,6 +93,7 @@ movies = load_pickle_from_url(MOVIES_URL)
 similarity = load_numpy_from_url(SIM_URL)
 movie_list = movies["title"].values
 
+# TMDB API
 TMDB_API_KEY = "e04691e95a5f87647ec04389ffb6b282"
 
 # ----------------------------------------------------
@@ -138,7 +125,7 @@ def recommend(movie):
             posters.append(fetch_poster(movie_id))
         return names, posters
     except Exception as e:
-        st.error(f"Error fetching recommendations: {e}")
+        st.error(f"⚠ Error fetching recommendations: {e}")
         return [], []
 
 # ----------------------------------------------------
