@@ -22,12 +22,4 @@ st.markdown("""
             text-shadow: 0px 0px 20px rgba(229,9,20,0.6);
         }
         .movie-card img {
-            border-radius: 12px;
-            transition: transform .3s;
-        }
-        .movie-card:hover img {
-            transform: scale(1.08);
-            box-shadow: 0px 0px 25px rgba(229,9,20,0.5);
-        }
-        .movie-name {
-            text-align:c
+            border
