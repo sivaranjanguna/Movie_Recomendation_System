@@ -4,6 +4,7 @@ import pandas as pd
 import pickle
 import requests
 import io
+import time
 
 # ----------------------------------------------------
 # Page Setup (Dark Netflix Theme)
@@ -48,25 +49,33 @@ MOVIES_URL = "https://drive.google.com/uc?export=download&id=YOUR_MOVIES_FILE_ID
 SIM_URL = "https://drive.google.com/uc?export=download&id=YOUR_SIM_FILE_ID"
 
 # ----------------------------------------------------
-# Robust Google Drive Loader
+# Robust Google Drive Download
 # ----------------------------------------------------
-def download_file_from_google_drive(url: str) -> io.BytesIO:
+def download_file_from_google_drive(url: str, max_retries=3) -> io.BytesIO:
     session = requests.Session()
-    response = session.get(url, stream=True)
+    for attempt in range(max_retries):
+        try:
+            response = session.get(url, stream=True)
+            # Handle large file confirmation token
+            token = None
+            for key, value in response.cookies.items():
+                if key.startswith("download_warning"):
+                    token = value
+            if token:
+                url = url + "&confirm=" + token
+                response = session.get(url, stream=True)
+            response.raise_for_status()
+            return io.BytesIO(response.content)
+        except requests.exceptions.RequestException as e:
+            if attempt < max_retries - 1:
+                time.sleep(2)  # wait before retry
+                continue
+            else:
+                raise st.error(f"Failed to download file from Google Drive: {e}")
 
-    # Handle large file confirmation
-    token = None
-    for key, value in response.cookies.items():
-        if key.startswith("download_warning"):
-            token = value
-
-    if token:
-        url = url + "&confirm=" + token
-        response = session.get(url, stream=True)
-
-    response.raise_for_status()
-    return io.BytesIO(response.content)
-
+# ----------------------------------------------------
+# Load Pickle
+# ----------------------------------------------------
 @st.cache_resource
 def load_pickle_from_url(url: str):
     content = download_file_from_google_drive(url)
@@ -77,20 +86,22 @@ def load_pickle_from_url(url: str):
             "Failed to load pickle. The downloaded file may be invalid or HTML instead of a pickle file."
         ) from e
 
+# ----------------------------------------------------
+# Load Numpy .npy
+# ----------------------------------------------------
 @st.cache_resource
 def load_numpy_from_url(url: str):
     content = download_file_from_google_drive(url)
     magic = content.read(6)  # .npy files start with b'\x93NUMPY'
     if magic != b'\x93NUMPY':
         raise ValueError(
-            "Downloaded file is not a valid .npy file. "
-            "It may be an HTML page from Google Drive instead of the actual data file."
+            "Downloaded file is not a valid .npy file. It may be an HTML page from Google Drive instead of the actual data file."
         )
     content.seek(0)
     return np.load(content, allow_pickle=True)
 
 # ----------------------------------------------------
-# Load movie data and similarity matrix
+# Load Data
 # ----------------------------------------------------
 movies = load_pickle_from_url(MOVIES_URL)
 similarity = load_numpy_from_url(SIM_URL)
@@ -99,7 +110,7 @@ movie_list = movies["title"].values
 TMDB_API_KEY = "e04691e95a5f87647ec04389ffb6b282"
 
 # ----------------------------------------------------
-# Fetch Poster with caching
+# Fetch Poster
 # ----------------------------------------------------
 @st.cache_data
 def fetch_poster(movie_id):
@@ -131,7 +142,7 @@ def recommend(movie):
         return [], []
 
 # ----------------------------------------------------
-# UI
+# Streamlit UI
 # ----------------------------------------------------
 selected_movie = st.selectbox("Search a movie", movie_list)
 
