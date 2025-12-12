@@ -42,20 +42,20 @@ st.markdown("""
 st.markdown('<div class="title">🎬 Netflix-Style Movie Recommendation</div>', unsafe_allow_html=True)
 
 # ----------------------------------------------------
-# Google Drive Links for Large Files
+# Google Drive URLs
 # ----------------------------------------------------
-MOVIES_URL = "https://drive.google.com/uc?export=download&id=1tnA7-HNQK-OwdGwzGfNBenfijDCRv7TA"
-SIM_URL = "https://drive.google.com/uc?export=download&id=1UUMf4GRrFpiab4_9peK7GGH21p9MCq5D"
+MOVIES_URL = "https://drive.google.com/uc?export=download&id=YOUR_MOVIES_FILE_ID"
+SIM_URL = "https://drive.google.com/uc?export=download&id=YOUR_SIM_FILE_ID"
 
 # ----------------------------------------------------
-# Helper function to handle Google Drive large files
+# Robust Google Drive Loader
 # ----------------------------------------------------
-def download_file_from_google_drive(url):
+def download_file_from_google_drive(url: str) -> io.BytesIO:
     session = requests.Session()
     response = session.get(url, stream=True)
-    token = None
 
-    # Check for confirmation token for large files
+    # Handle large file confirmation
+    token = None
     for key, value in response.cookies.items():
         if key.startswith("download_warning"):
             token = value
@@ -64,22 +64,34 @@ def download_file_from_google_drive(url):
         url = url + "&confirm=" + token
         response = session.get(url, stream=True)
 
-    content = io.BytesIO(response.content)
-    return content
-
-# ----------------------------------------------------
-# Load Data with caching
-# ----------------------------------------------------
-@st.cache_resource
-def load_pickle_from_url(url):
-    content = download_file_from_google_drive(url)
-    return pickle.load(content)
+    response.raise_for_status()
+    return io.BytesIO(response.content)
 
 @st.cache_resource
-def load_numpy_from_url(url):
+def load_pickle_from_url(url: str):
     content = download_file_from_google_drive(url)
+    try:
+        return pickle.load(content)
+    except Exception as e:
+        raise ValueError(
+            "Failed to load pickle. The downloaded file may be invalid or HTML instead of a pickle file."
+        ) from e
+
+@st.cache_resource
+def load_numpy_from_url(url: str):
+    content = download_file_from_google_drive(url)
+    magic = content.read(6)  # .npy files start with b'\x93NUMPY'
+    if magic != b'\x93NUMPY':
+        raise ValueError(
+            "Downloaded file is not a valid .npy file. "
+            "It may be an HTML page from Google Drive instead of the actual data file."
+        )
+    content.seek(0)
     return np.load(content, allow_pickle=True)
 
+# ----------------------------------------------------
+# Load movie data and similarity matrix
+# ----------------------------------------------------
 movies = load_pickle_from_url(MOVIES_URL)
 similarity = load_numpy_from_url(SIM_URL)
 movie_list = movies["title"].values
